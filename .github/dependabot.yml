@@ -1,0 +1,38 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: terraform
+    directory: /infra/bootstrap
+    schedule:
+      interval: weekly
+  - package-ecosystem: terraform
+    directory: /infra/envs/dev
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod
+    directory: /apps/retrieval-svc
+    schedule:
+      interval: weekly
+  - package-ecosystem: maven
+    directory: /apps/api
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /apps/api
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /apps/retrieval-svc
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /apps/web
+    schedule:
+      interval: weekly

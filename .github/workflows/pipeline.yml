@@ -1,0 +1,295 @@
+name: Walking skeleton pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Lint, tests and Terraform validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.27.3
+          cache-dependency-path: apps/retrieval-svc/go.mod
+
+      - name: Test and lint Go
+        working-directory: apps/retrieval-svc
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race ./...
+
+      - name: Set up Java
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Test and lint Spring API
+        working-directory: apps/api
+        run: mvn --batch-mode --no-transfer-progress verify
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.12.1
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Test and lint web app
+        working-directory: apps/web
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Format Terraform
+        run: terraform fmt -check -recursive infra
+
+      - name: Initialize and validate Terraform
+        shell: bash
+        run: |
+          for root in infra/bootstrap infra/envs/dev; do
+            terraform -chdir="$root" init -backend=false -input=false
+            terraform -chdir="$root" validate
+          done
+
+      - name: Set up TFLint
+        uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.65.0
+
+      - name: Lint Terraform
+        run: |
+          tflint --chdir=infra --init
+          tflint --chdir=infra --recursive
+
+      - name: Checkov
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/checkov"
+          "$RUNNER_TEMP/checkov/bin/pip" install --disable-pip-version-check checkov==3.3.30
+          "$RUNNER_TEMP/checkov/bin/checkov" --directory infra --framework terraform --quiet
+
+  terraform-plan:
+    name: Terraform plan
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: quality
+    runs-on: ubuntu-latest
+    concurrency:
+      group: azure-dev-terraform
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_STATE_RESOURCE_GROUP: ${{ vars.TF_STATE_RESOURCE_GROUP }}
+      TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+      TF_VAR_name_suffix: ${{ vars.RESOURCE_NAME_SUFFIX }}
+      TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      TF_VAR_monthly_budget_amount: ${{ vars.MONTHLY_BUDGET_AMOUNT }}
+      TF_VAR_budget_contact_email: ${{ vars.BUDGET_CONTACT_EMAIL }}
+      TF_VAR_deploy_principal_object_id: ${{ vars.AZURE_DEPLOY_PRINCIPAL_OBJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure login with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Initialize Terraform backend
+        working-directory: infra/envs/dev
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=dev.terraform.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="tenant_id=${ARM_TENANT_ID}" \
+            -backend-config="subscription_id=${ARM_SUBSCRIPTION_ID}" \
+            -backend-config="client_id=${ARM_CLIENT_ID}"
+
+      - name: Create Terraform plan
+        working-directory: infra/envs/dev
+        run: terraform plan -input=false -no-color -out=dev.tfplan
+
+      - name: Comment plan summary on pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        working-directory: infra/envs/dev
+        run: |
+          summary="$(terraform show -no-color dev.tfplan | awk '/^Plan: / { print; found=1 } END { if (!found) print "Plan: no changes" }')"
+          gh pr comment "$PR_NUMBER" --body "$(printf '### Terraform plan summary\n\n`%s`\n\nFull plan details are intentionally not published in the PR comment.' "$summary")"
+
+  deploy-dev:
+    name: Apply and deploy dev
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: quality
+    runs-on: ubuntu-latest
+    concurrency:
+      group: azure-dev-terraform
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_STATE_RESOURCE_GROUP: ${{ vars.TF_STATE_RESOURCE_GROUP }}
+      TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+      TF_VAR_name_suffix: ${{ vars.RESOURCE_NAME_SUFFIX }}
+      TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      TF_VAR_monthly_budget_amount: ${{ vars.MONTHLY_BUDGET_AMOUNT }}
+      TF_VAR_budget_contact_email: ${{ vars.BUDGET_CONTACT_EMAIL }}
+      TF_VAR_deploy_principal_object_id: ${{ vars.AZURE_DEPLOY_PRINCIPAL_OBJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure login with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Initialize Terraform backend
+        working-directory: infra/envs/dev
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=dev.terraform.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="tenant_id=${ARM_TENANT_ID}" \
+            -backend-config="subscription_id=${ARM_SUBSCRIPTION_ID}" \
+            -backend-config="client_id=${ARM_CLIENT_ID}"
+
+      - name: Apply infrastructure
+        working-directory: infra/envs/dev
+        run: terraform apply -auto-approve -input=false
+
+      - name: Azure login for image deployment with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push application images
+        run: |
+          set -euo pipefail
+          registry="$(terraform -chdir=infra/envs/dev output -raw container_registry_login_server)"
+          acr_name="$(terraform -chdir=infra/envs/dev output -raw container_registry_name)"
+          attempt=1
+          until az acr login --name "$acr_name"; do
+            if [ "$attempt" -ge 12 ]; then
+              echo "ACR login did not become available after RBAC assignment." >&2
+              exit 1
+            fi
+            attempt=$((attempt + 1))
+            sleep 5
+          done
+          docker build --pull --tag "$registry/api:$GITHUB_SHA" --file apps/api/Dockerfile apps/api
+          docker build --pull --tag "$registry/retrieval-svc:$GITHUB_SHA" --file apps/retrieval-svc/Dockerfile apps/retrieval-svc
+          docker build --pull --tag "$registry/web:$GITHUB_SHA" --file apps/web/Dockerfile apps/web
+          docker push "$registry/api:$GITHUB_SHA"
+          docker push "$registry/retrieval-svc:$GITHUB_SHA"
+          docker push "$registry/web:$GITHUB_SHA"
+
+      - name: Deploy and smoke test
+        working-directory: infra/envs/dev
+        run: |
+          set -euo pipefail
+          az config set extension.use_dynamic_install=yes_without_prompt
+          resource_group="$(terraform output -raw resource_group_name)"
+          api_name="$(terraform output -raw api_app_name)"
+          retrieval_name="$(terraform output -raw retrieval_app_name)"
+          web_name="$(terraform output -raw web_app_name)"
+          registry="$(terraform output -raw container_registry_login_server)"
+
+          update_app() {
+            app_name="$1"
+            image="$2"
+            attempt=1
+            until az containerapp update --resource-group "$resource_group" --name "$app_name" --image "$image" --output none; do
+              if [ "$attempt" -ge 12 ]; then
+                printf 'Container App update failed after RBAC assignment: %s\n' "$app_name" >&2
+                return 1
+              fi
+              attempt=$((attempt + 1))
+              sleep 5
+            done
+          }
+
+          update_app "$api_name" "$registry/api:$GITHUB_SHA"
+          update_app "$retrieval_name" "$registry/retrieval-svc:$GITHUB_SHA"
+          update_app "$web_name" "$registry/web:$GITHUB_SHA"
+
+          check_health() {
+            app_name="$1"
+            fqdn="$(az containerapp show --resource-group "$resource_group" --name "$app_name" --query properties.configuration.ingress.fqdn --output tsv)"
+            attempt=1
+            while [ "$attempt" -le 12 ]; do
+              if curl --silent --show-error --fail --connect-timeout 5 --max-time 10 "https://${fqdn}/health"; then
+                printf '\nSmoke test passed: %s\n' "$app_name"
+                return 0
+              fi
+              attempt=$((attempt + 1))
+              sleep 5
+            done
+            printf 'Smoke test failed: %s did not become healthy.\n' "$app_name" >&2
+            return 1
+          }
+
+          check_health "$api_name"
+          check_health "$retrieval_name"
+          check_health "$web_name"
