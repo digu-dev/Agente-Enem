@@ -118,6 +118,17 @@ step4() {
   trap 'mv -f backend.tf.off backend.tf 2>/dev/null || true' EXIT
   rm -rf .terraform
   terraform init
+
+  # Retomada após perda do state local: importa o que já existe na Azure.
+  local rg_id="/subscriptions/$SUBSCRIPTION_ID/resourceGroups/$STATE_RG"
+  if az group show -n "$STATE_RG" --output none 2>/dev/null; then
+    echo "Resource Group já existe; importando para o state local."
+    terraform import "${vars[@]}" azurerm_resource_group.state "$rg_id"
+    if az storage account show -n "$STATE_SA" -g "$STATE_RG" --output none 2>/dev/null; then
+      terraform import "${vars[@]}" azurerm_storage_account.state \
+        "$rg_id/providers/Microsoft.Storage/storageAccounts/$STATE_SA"
+    fi
+  fi
   terraform apply "${vars[@]}" -target=azurerm_resource_group.state -target=azurerm_storage_account.state
 
   local state_id me
