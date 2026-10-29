@@ -86,9 +86,12 @@ Crie credenciais federadas no Microsoft Entra para o issuer
 `https://token.actions.githubusercontent.com`, audiência `api://AzureADTokenExchange`
 e estes subjects:
 
-- Plan de PR interno: `repo:digu-dev/Agente-Enem:pull_request`
+- Este repositório usa subject imutável (IDs de dono e repositório), com prefixo
+  `repo:digu-dev@207451038/Agente-Enem@1437710208`. O formato por nome
+  (`repo:digu-dev/Agente-Enem`) não casa e causa `AADSTS700213`.
+- Plan de PR interno: `<prefixo>:pull_request`
 - Apply e deploy na branch principal:
-  `repo:digu-dev/Agente-Enem:ref:refs/heads/main`
+  `<prefixo>:ref:refs/heads/main`
 
 O plan de PR não roda em forks: conceder OIDC a código de terceiros poderia
 expor acesso à subscription e ao state. Use três identidades federadas distintas:

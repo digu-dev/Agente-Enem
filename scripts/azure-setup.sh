@@ -92,18 +92,35 @@ step2() {
 
 step3() {
   say "Etapa 3/7: federação OIDC (GitHub -> Azure)"
-  echo "plan   -> repo:$REPO:pull_request"
-  echo "apply  -> repo:$REPO:ref:refs/heads/main"
-  echo "deploy -> repo:$REPO:ref:refs/heads/main"
-  confirm "Criar as credenciais federadas?" || return 0
+  # O GitHub pode emitir subjects imutáveis (com IDs de dono e repositório).
+  local info prefix
+  info="$(curl -fsSL "https://api.github.com/repos/$REPO")" || info=""
+  prefix="repo:$REPO"
+  if [ -n "$info" ]; then
+    prefix="repo:${REPO%%/*}@$(printf '%s' "$info" | jq -r .owner.id)/${REPO#*/}@$(printf '%s' "$info" | jq -r .id)"
+  else
+    echo "Não foi possível consultar os IDs do repositório; usando o subject por nome."
+  fi
+  echo "plan   -> $prefix:pull_request"
+  echo "apply  -> $prefix:ref:refs/heads/main"
+  echo "deploy -> $prefix:ref:refs/heads/main"
+  confirm "Criar/atualizar as credenciais federadas?" || return 0
   fed() { # $1=client id $2=nome $3=subject
-    az ad app federated-credential create --id "$1" --parameters "$(printf \
+    local body existing
+    body="$(printf \
       '{"name":"%s","issuer":"https://token.actions.githubusercontent.com","subject":"%s","audiences":["api://AzureADTokenExchange"]}' \
-      "$2" "$3")" --output none || echo "Aviso: credencial '$2' talvez já exista."
+      "$2" "$3")"
+    existing="$(az ad app federated-credential list --id "$1" --query "[?name=='$2'].name" -o tsv)"
+    if [ -n "$existing" ]; then
+      az ad app federated-credential update --id "$1" --federated-credential-id "$2" \
+        --parameters "$body" --output none
+    else
+      az ad app federated-credential create --id "$1" --parameters "$body" --output none
+    fi
   }
-  fed "$PLAN_CLIENT_ID" gha-pr "repo:$REPO:pull_request"
-  fed "$APPLY_CLIENT_ID" gha-main "repo:$REPO:ref:refs/heads/main"
-  fed "$DEPLOY_CLIENT_ID" gha-main "repo:$REPO:ref:refs/heads/main"
+  fed "$PLAN_CLIENT_ID" gha-pr "$prefix:pull_request"
+  fed "$APPLY_CLIENT_ID" gha-main "$prefix:ref:refs/heads/main"
+  fed "$DEPLOY_CLIENT_ID" gha-main "$prefix:ref:refs/heads/main"
 }
 
 step4() {

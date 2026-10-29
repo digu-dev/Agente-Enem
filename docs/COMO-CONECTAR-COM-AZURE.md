@@ -87,9 +87,12 @@ fed() { # $1=client id, $2=nome, $3=subject
     \"subject\": \"$3\",
     \"audiences\": [\"api://AzureADTokenExchange\"]}"
 }
-fed "<client-id-plan>"   gha-pr   "repo:${REPO}:pull_request"
-fed "<client-id-apply>"  gha-main "repo:${REPO}:ref:refs/heads/main"
-fed "<client-id-deploy>" gha-main "repo:${REPO}:ref:refs/heads/main"
+# O GitHub pode usar subjects imutáveis (IDs): confira em Settings > Actions >
+# OIDC ou pelo erro AADSTS700213 do pipeline. Para este repositório:
+PREFIX="repo:digu-dev@207451038/Agente-Enem@1437710208"
+fed "<client-id-plan>"   gha-pr   "$PREFIX:pull_request"
+fed "<client-id-apply>"  gha-main "$PREFIX:ref:refs/heads/main"
+fed "<client-id-deploy>" gha-main "$PREFIX:ref:refs/heads/main"
 ```
 
 ## 4. Bootstrap do state remoto
@@ -181,7 +184,7 @@ updates, Secret scanning e Push protection. Em `Settings → Branches`, proteja 
 
 | Sintoma | Causa provável |
 |---|---|
-| `AADSTS70021` / `No matching federated identity` | Subject da credencial federada diferente do evento (PR vs `main`) |
+| `AADSTS700213` / `No matching federated identity` | Subject da credencial diferente do emitido (PR vs `main`, ou formato por nome vs por IDs). Rode `scripts/azure-setup.sh 3` |
 | 403 ao inicializar o backend | Role `Storage Blob Data Contributor` ausente ou ainda propagando |
 | `AuthorizationFailed` em role assignment | Falta `Role Based Access Control Administrator` na identidade apply |
 | `MissingSubscriptionRegistration` | Provider do passo 0 não registrado |
