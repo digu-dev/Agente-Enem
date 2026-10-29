@@ -190,8 +190,33 @@ updates, Secret scanning e Push protection. Em `Settings → Branches`, proteja 
 | `MissingSubscriptionRegistration` | Provider do passo 0 não registrado |
 | Nome de ACR/Storage/Key Vault já existe | Troque `RESOURCE_NAME_SUFFIX` / `STATE_SA` |
 
-## 10. Custos e limpeza
+## 10. Ligar e desligar o ambiente (controle de custo)
 
-Os recursos de dev são de SKU básico, mas geram custo. O budget apenas alerta.
-Para remover: `terraform destroy` em `infra/envs/dev` e depois em
-`infra/bootstrap`, e apague as App Registrations `enem-gha-*`.
+Os recursos de dev só precisam existir enquanto você trabalha. O state, as
+identidades OIDC, as roles e as variáveis do GitHub **não** são apagados, então
+religar não repete nenhum passo manual.
+
+- **Desligar:** GitHub → `Actions` → **Destroy dev environment** → `Run workflow`
+  na branch `main` → digite `DESTROY`. Apaga os recursos de `infra/envs/dev`.
+- **Ligar:** `Actions` → **Walking skeleton pipeline** → `Run workflow` na
+  branch `main` (ou faça um push na `main`). Recria a infraestrutura, publica as
+  imagens, faz o deploy e roda o smoke test (cerca de 10 a 15 minutos).
+
+Pelo CLI: `gh workflow run destroy-dev.yml -f confirm=DESTROY` e
+`gh workflow run pipeline.yml --ref main`.
+
+Notas:
+- Os dois workflows só rodam na `main` (a credencial OIDC de apply/deploy aceita
+  somente essa branch) e compartilham a fila `azure-dev-terraform`.
+- O Key Vault tem purge protection: ao desligar ele fica em soft delete por 7
+  dias e, ao religar com o mesmo sufixo, o Terraform o recupera. O workspace do
+  Log Analytics é apagado de forma permanente para liberar o nome.
+- Logs, métricas e imagens do ACR são perdidos a cada desligamento.
+- Com o ambiente desligado sobram só o state (centavos) e as identidades.
+
+## 11. Custos e limpeza total
+
+Os recursos de dev são de SKU básico, mas geram custo. O orçamento apenas
+alerta. Para remover tudo de vez: rode o workflow de destroy, depois
+`terraform destroy` em `infra/bootstrap` (state remoto) e apague as App
+Registrations `enem-gha-*`.
