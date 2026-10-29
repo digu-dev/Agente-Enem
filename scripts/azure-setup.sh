@@ -169,6 +169,28 @@ step4() {
   echo "Se algum comando falhou com 403, aguarde alguns minutos e rode: $0 4"
 }
 
+# O plan precisa de listSecrets para ler Container Apps; Reader não inclui isso.
+ensure_secrets_reader_role() {
+  local sub="$1" def
+  if [ -n "$(az role definition list --name enem-containerapp-secrets-reader \
+    --query '[0].name' -o tsv)" ]; then
+    return 0
+  fi
+  def="$(mktemp)"
+  cat >"$def" <<JSON
+{
+  "Name": "enem-containerapp-secrets-reader",
+  "Description": "Permite listSecrets em Container Apps para o terraform plan.",
+  "Actions": ["Microsoft.App/containerApps/listSecrets/action"],
+  "AssignableScopes": ["$sub"]
+}
+JSON
+  az role definition create --role-definition "$def" --output none
+  rm -f "$def"
+  echo "Role customizada criada. Aguardando propagação..."
+  sleep 30
+}
+
 step5() {
   say "Etapa 5/7: permissões (RBAC) das identidades"
   local sub="/subscriptions/$SUBSCRIPTION_ID"
@@ -177,6 +199,7 @@ step5() {
   container="$state_id/blobServices/default/containers/tfstate"
   cat <<EOF
 plan   : Reader (subscription) + Storage Blob Data Contributor (container tfstate)
+         + role customizada "enem-containerapp-secrets-reader" (só listSecrets)
 apply  : Contributor + Role Based Access Control Administrator (subscription)
          + Storage Blob Data Contributor (container tfstate)
 deploy : sem roles aqui; o Terraform cria AcrPush e Container Apps Contributor.
@@ -185,6 +208,8 @@ EOF
   confirm "Atribuir estas roles?" || return 0
   role "$PLAN_CLIENT_ID" "Reader" "$sub"
   role "$PLAN_CLIENT_ID" "Storage Blob Data Contributor" "$container"
+  ensure_secrets_reader_role "$sub"
+  role "$PLAN_CLIENT_ID" "enem-containerapp-secrets-reader" "$sub"
   role "$APPLY_CLIENT_ID" "Contributor" "$sub"
   role "$APPLY_CLIENT_ID" "Role Based Access Control Administrator" "$sub"
   role "$APPLY_CLIENT_ID" "Storage Blob Data Contributor" "$container"
