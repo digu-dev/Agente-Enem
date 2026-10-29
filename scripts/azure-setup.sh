@@ -112,7 +112,12 @@ step4() {
   confirm "Rodar o terraform apply do bootstrap?" || return 0
   cd "$REPO_ROOT/infra/bootstrap"
   local vars=(-var="resource_group_name=$STATE_RG" -var="storage_account_name=$STATE_SA" -var="location=$LOCATION")
-  terraform init -backend=false
+  # Sem o backend remoto ainda existente, as duas primeiras fases usam state local.
+  [ -f backend.tf ] || mv backend.tf.off backend.tf
+  mv backend.tf backend.tf.off
+  trap 'mv -f backend.tf.off backend.tf 2>/dev/null || true' EXIT
+  rm -rf .terraform
+  terraform init
   terraform apply "${vars[@]}" -target=azurerm_resource_group.state -target=azurerm_storage_account.state
 
   local state_id me
@@ -125,6 +130,7 @@ step4() {
   echo "Aguardando propagação do RBAC (90s)..."
   sleep 90
   terraform apply "${vars[@]}"
+  mv backend.tf.off backend.tf
   terraform init -migrate-state -force-copy \
     -backend-config="resource_group_name=$STATE_RG" \
     -backend-config="storage_account_name=$STATE_SA" \
