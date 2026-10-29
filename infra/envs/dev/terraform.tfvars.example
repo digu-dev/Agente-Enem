@@ -1,0 +1,6 @@
+name_suffix           = "x7k3p"
+tenant_id             = "00000000-0000-0000-0000-000000000000"
+location              = "eastus2"
+monthly_budget_amount = 100
+budget_contact_email  = "platform@example.com"
+deploy_principal_object_id = "00000000-0000-0000-0000-000000000000"
