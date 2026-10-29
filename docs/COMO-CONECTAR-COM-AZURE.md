@@ -8,6 +8,20 @@ serviços em dev". Detalhes e justificativas estão em
 > permissões reais na sua conta Azure: leia antes de rodar. Nenhum client secret
 > é criado; o GitHub autentica por OIDC.
 
+## Atalho: script interativo
+
+`scripts/azure-setup.sh` executa os passos 0 a 7 abaixo, pedindo confirmação
+antes de cada etapa que cria algo (ideal no Azure Cloud Shell, já logado):
+
+```bash
+git clone https://github.com/digu-dev/Agente-Enem.git && cd Agente-Enem
+scripts/azure-setup.sh        # todas as etapas
+scripts/azure-setup.sh 4      # apenas uma etapa (retomada após erro)
+```
+
+Os valores ficam em `~/.enem-azure-setup.env` (permissão 600, sem secrets).
+Os passos manuais abaixo continuam valendo como referência.
+
 ## 0. Pré-requisitos
 
 - Conta Azure com uma **subscription ativa** (a conta gratuita serve para dev) e
