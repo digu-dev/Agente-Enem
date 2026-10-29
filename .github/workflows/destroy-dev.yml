@@ -1,0 +1,74 @@
+name: Destroy dev environment
+
+# Desliga o ambiente dev para parar a cobrança. O state remoto, as identidades
+# e as variáveis são mantidos. Para ligar de novo, rode "Walking skeleton
+# pipeline" manualmente na main (ou faça um push na main).
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Digite DESTROY para confirmar'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  destroy-dev:
+    name: Destroy dev
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'DESTROY'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: azure-dev-terraform
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_STATE_RESOURCE_GROUP: ${{ vars.TF_STATE_RESOURCE_GROUP }}
+      TF_STATE_STORAGE_ACCOUNT: ${{ vars.TF_STATE_STORAGE_ACCOUNT }}
+      TF_VAR_name_suffix: ${{ vars.RESOURCE_NAME_SUFFIX }}
+      TF_VAR_tenant_id: ${{ vars.AZURE_TENANT_ID }}
+      TF_VAR_monthly_budget_amount: ${{ vars.MONTHLY_BUDGET_AMOUNT }}
+      TF_VAR_budget_contact_email: ${{ vars.BUDGET_CONTACT_EMAIL }}
+      TF_VAR_deploy_principal_object_id: ${{ vars.AZURE_DEPLOY_PRINCIPAL_OBJECT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure login with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_APPLY_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.1
+          terraform_wrapper: false
+
+      - name: Initialize Terraform backend
+        working-directory: infra/envs/dev
+        run: |
+          terraform init -input=false \
+            -backend-config="resource_group_name=${TF_STATE_RESOURCE_GROUP}" \
+            -backend-config="storage_account_name=${TF_STATE_STORAGE_ACCOUNT}" \
+            -backend-config="container_name=tfstate" \
+            -backend-config="key=dev.terraform.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true" \
+            -backend-config="tenant_id=${ARM_TENANT_ID}" \
+            -backend-config="subscription_id=${ARM_SUBSCRIPTION_ID}" \
+            -backend-config="client_id=${ARM_CLIENT_ID}"
+
+      - name: Destroy infrastructure
+        working-directory: infra/envs/dev
+        run: terraform destroy -auto-approve -input=false

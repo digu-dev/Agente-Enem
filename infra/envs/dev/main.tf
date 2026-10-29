@@ -10,7 +10,22 @@ terraform {
 }
 
 provider "azurerm" {
-  features {}
+  features {
+    # Dev is destroyed and recreated on demand: the Key Vault has purge protection,
+    # so it is recovered (not purged) on recreate, and the workspace is purged so
+    # its name can be reused immediately.
+    key_vault {
+      purge_soft_delete_on_destroy    = false
+      recover_soft_deleted_key_vaults = true
+    }
+    log_analytics_workspace {
+      permanently_delete_on_destroy = true
+    }
+    # Azure may add generated resources (for example Application Insights rules).
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
+  }
 }
 
 locals {
