@@ -95,11 +95,12 @@ step3() {
   # O GitHub pode emitir subjects imutáveis (com IDs de dono e repositório).
   local info prefix
   info="$(curl -fsSL "https://api.github.com/repos/$REPO")" || info=""
-  prefix="repo:$REPO"
-  if [ -n "$info" ]; then
+  # Prefixo imutável conhecido deste repositório, usado se a consulta falhar.
+  prefix="repo:digu-dev@207451038/Agente-Enem@1437710208"
+  if [ -n "$info" ] && command -v jq >/dev/null; then
     prefix="repo:${REPO%%/*}@$(printf '%s' "$info" | jq -r .owner.id)/${REPO#*/}@$(printf '%s' "$info" | jq -r .id)"
   else
-    echo "Não foi possível consultar os IDs do repositório; usando o subject por nome."
+    echo "Consulta à API indisponível; usando o prefixo imutável conhecido."
   fi
   echo "plan   -> $prefix:pull_request"
   echo "apply  -> $prefix:ref:refs/heads/main"
