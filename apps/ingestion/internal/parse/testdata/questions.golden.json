@@ -1,0 +1,13 @@
+[
+  {
+    "numero": 7,
+    "enunciado": "Uma pesquisa analisou os dados apresentados na tabela.",
+    "alternativas": [
+      {"letra": "A", "texto": "10"},
+      {"letra": "B", "texto": "20"},
+      {"letra": "C", "texto": "30"},
+      {"letra": "D", "texto": "40"},
+      {"letra": "E", "texto": "50"}
+    ]
+  }
+]

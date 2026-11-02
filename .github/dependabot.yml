@@ -16,6 +16,10 @@ updates:
     directory: /apps/retrieval-svc
     schedule:
       interval: weekly
+  - package-ecosystem: gomod
+    directory: /apps/ingestion
+    schedule:
+      interval: weekly
   - package-ecosystem: maven
     directory: /apps/api
     schedule:

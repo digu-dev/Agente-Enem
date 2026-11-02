@@ -11,3 +11,6 @@ Consulte [Fase 0 — walking skeleton](docs/FASE-0-WALKING-SKELETON.md) para
 arquitetura, pré-requisitos de Azure/GitHub, bootstrap do state, pipeline,
 testes e riscos conhecidos. Para ligar tudo à Azure, siga
 [Como conectar com a Azure](docs/COMO-CONECTAR-COM-AZURE.md).
+
+O CLI local da Fase 1 para ingestão de provas está em
+[apps/ingestion](apps/ingestion/README.md).
