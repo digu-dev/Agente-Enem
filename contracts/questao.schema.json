@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agente-enem.digu.dev/contracts/questao.schema.json",
+  "title": "Questao ENEM",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "arquivo",
+    "pagina",
+    "corpus_version",
+    "ano",
+    "caderno",
+    "tipo",
+    "fonte",
+    "split",
+    "numero",
+    "enunciado",
+    "alternativas",
+    "gabarito",
+    "habilidade",
+    "competencia",
+    "conteudos",
+    "imagens"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^enem-[a-z0-9-]+$" },
+    "arquivo": { "type": "string", "minLength": 1 },
+    "pagina": { "type": "integer", "minimum": 1 },
+    "corpus_version": { "type": "string", "minLength": 1 },
+    "ano": { "type": "integer", "minimum": 1998 },
+    "caderno": { "type": "string", "minLength": 1 },
+    "tipo": { "type": "string", "enum": ["prova", "gabarito"] },
+    "fonte": { "type": "string", "minLength": 1 },
+    "split": { "type": "string", "enum": ["train", "validation", "index", "holdout"] },
+    "numero": { "type": "integer", "minimum": 1 },
+    "enunciado": { "type": "string", "minLength": 1 },
+    "alternativas": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["letra", "texto"],
+        "properties": {
+          "letra": { "type": "string", "pattern": "^[A-E]$" },
+          "texto": { "type": "string" }
+        }
+      }
+    },
+    "gabarito": { "type": ["string", "null"], "pattern": "^[A-E]$" },
+    "habilidade": { "type": ["string", "null"], "minLength": 1 },
+    "competencia": { "type": ["string", "null"], "minLength": 1 },
+    "conteudos": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "imagens": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^images/enem-[a-z0-9-]+-p[1-9][0-9]*\\.png$"
+      }
+    }
+  }
+}

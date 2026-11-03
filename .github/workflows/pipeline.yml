@@ -22,7 +22,9 @@ jobs:
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: 1.27.3
-          cache-dependency-path: apps/retrieval-svc/go.mod
+          cache-dependency-path: |
+            apps/retrieval-svc/go.mod
+            apps/ingestion/go.sum
 
       - name: Test and lint Go
         working-directory: apps/retrieval-svc
@@ -30,6 +32,19 @@ jobs:
           test -z "$(gofmt -l .)"
           go vet ./...
           go test -race ./...
+
+      - name: Test and lint ingestion
+        working-directory: apps/ingestion
+        run: |
+          test -z "$(gofmt -l .)"
+          go vet ./...
+          go test -race ./...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
+          for package in parse validate; do
+            coverage="$(go test -cover "./internal/$package" | awk '{ for (i = 1; i <= NF; i++) if ($i == "coverage:") { gsub("%", "", $(i + 1)); print $(i + 1) } }')"
+            awk -v coverage="$coverage" 'BEGIN { exit !(coverage >= 80) }'
+          done
 
       - name: Set up Java
         uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0

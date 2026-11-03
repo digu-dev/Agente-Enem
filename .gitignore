@@ -8,6 +8,7 @@ crash.log
 crash.*.log
 .DS_Store
 node_modules/
+data/
 dist/
 target/
 coverage/
