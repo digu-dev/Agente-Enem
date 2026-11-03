@@ -119,3 +119,27 @@ func TestParsePagesGolden(t *testing.T) {
 		t.Fatalf("golden mismatch\nactual:\n%#v\nwant:\n%#v", actualValue, expectedValue)
 	}
 }
+
+func TestParsePagesENEMLayout(t *testing.T) {
+	text := "1. Este CADERNO contém 90 questões.\n\n" +
+		"Questão 91\n\nA produção de vacinas é importante.\nQual é a resposta?\n" +
+		"A 20 100\nB 20 200\nC 20 300\nD 20 400\nE 20 600\n" +
+		"ENEM2025ENEM2025ENEM2025\nMATEMÁTICA E SUAS TECNOLOGIAS | 2º DIA | CADERNO 7 | AZUL\n020325AZ.indb 5   24/07/2025 19:03:13\n" +
+		"Questão 92\n\nVeja a figura. A figura é\n" +
+		"A    D\nB    E\nC\n"
+	got, err := ParsePages([]Page{{Number: 1, Text: text}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || got[0].Number != 91 || got[1].Number != 92 {
+		t.Fatalf("unexpected questions: %#v", got)
+	}
+	if got[0].Alternatives[4].Text != "20 600" {
+		t.Fatalf("footer leaked into alternative: %q", got[0].Alternatives[4].Text)
+	}
+	for i, alt := range got[1].Alternatives {
+		if alt.Letter != string(rune('A'+i)) || alt.Text != "" {
+			t.Fatalf("image alternatives not read in order: %#v", got[1].Alternatives)
+		}
+	}
+}

@@ -48,7 +48,10 @@ schema. `--max-tokens` limits the estimated total input tokens for the run;
 `--dry-run` prints only aggregate counts and token estimates.
 
 Extraction uses Poppler's layout-preserving text output and page rasterization.
-Question parsing recognizes numbered items and A–E alternatives; scan-only
+Question parsing recognizes numbered items and A–E alternatives. ENEM booklets
+("Questão N" headers) are read column by column, ignore the instruction items,
+watermarks and footers, and accept alternatives written as `A texto` or
+image-only (empty text). Scan-only
 documents therefore need the optional Document Intelligence fallback. Outputs
 are deterministic and replaced atomically. Export places holdout records only
 under `enem-golden`, never `enem-processed`, and writes a deterministic
