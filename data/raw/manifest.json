@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "nome": "2025_PV_impresso_D2_CD7.pdf",
+      "sha256": "39af0f0eaf3e30a3cd211bc19db9029204703965a2c76ff232fb3109181fa7c8",
+      "ano": 2025,
+      "caderno": "7-azul",
+      "tipo": "prova",
+      "fonte": "https://www.gov.br/inep/pt-br/areas-de-atuacao/avaliacao-e-exames-educacionais/enem/provas-e-gabaritos/2025",
+      "split": "train",
+      "corpus_version": "v1"
+    },
+    {
+      "nome": "2025_GB_impresso_D2_CD7.pdf",
+      "sha256": "9e2d470af35378df532173414ec7077c3ce4df38c084a5f1258579fdf9270aef",
+      "ano": 2025,
+      "caderno": "7-azul",
+      "tipo": "gabarito",
+      "fonte": "https://www.gov.br/inep/pt-br/areas-de-atuacao/avaliacao-e-exames-educacionais/enem/provas-e-gabaritos/2025",
+      "split": "train",
+      "corpus_version": "v1"
+    }
+  ]
+}

@@ -11,3 +11,8 @@ node_modules/
 dist/
 target/
 coverage/
+
+/data/*
+!/data/raw/
+/data/raw/*
+!/data/raw/manifest.json
