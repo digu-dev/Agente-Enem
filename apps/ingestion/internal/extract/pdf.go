@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,13 @@ func (l LocalPDF) Extract(ctx context.Context, path string, entry corpus.Entry) 
 		return nil, fmt.Errorf("local PDF text extraction failed")
 	}
 	pages := splitPages(string(output))
+	if looksTwoColumn(pages) {
+		columns, err := readColumnPages(ctx, path, len(pages))
+		if err != nil {
+			return nil, err
+		}
+		pages = columns
+	}
 	parsed, err := parse.ParsePages(pages)
 	if err != nil {
 		return nil, fmt.Errorf("parse extracted PDF text: %w", err)
@@ -125,6 +133,140 @@ func splitPages(text string) []parse.Page {
 		pages = append(pages, parse.Page{Number: i + 1, Text: page})
 	}
 	return pages
+}
+
+var (
+	sideBySideHeaders = regexp.MustCompile(`(?i)QUEST[ÃA]O\s*\d{1,3}.*\sQUEST[ÃA]O\s*\d{1,3}`)
+	bboxPage          = regexp.MustCompile(`<page width="([0-9.]+)" height="([0-9.]+)"`)
+	bboxWord          = regexp.MustCompile(`<word xMin="([0-9.]+)" yMin="([0-9.]+)" xMax="([0-9.]+)"`)
+	bboxHeader        = regexp.MustCompile(`<word xMin="([0-9.]+)"[^>]*>(?i:quest[ãa]o)</word>`)
+)
+
+type pageGeometry struct {
+	width, height float64
+	rightStart    float64
+	words         [][2]float64
+}
+
+// looksTwoColumn detects layouts where -layout merges two question columns
+// into the same text line.
+func looksTwoColumn(pages []parse.Page) bool {
+	for _, page := range pages {
+		for _, line := range strings.Split(page.Text, "\n") {
+			if sideBySideHeaders.MatchString(line) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pageGeometries finds where the right column starts on each page from the
+// x position of its "Questão" headers. Pages without one are single-column.
+func pageGeometries(ctx context.Context, path string, pageCount int) ([]pageGeometry, error) {
+	box, err := runLimited(ctx, maxTextBytes, "pdftotext", "-bbox", path, "-")
+	if err != nil {
+		return nil, errors.New("read PDF word positions failed")
+	}
+	geometries := make([]pageGeometry, 0, pageCount)
+	for _, chunk := range strings.Split(string(box), "<page ")[1:] {
+		match := bboxPage.FindStringSubmatch("<page " + chunk)
+		if match == nil {
+			return nil, errors.New("PDF page size not found")
+		}
+		width, errWidth := strconv.ParseFloat(match[1], 64)
+		height, errHeight := strconv.ParseFloat(match[2], 64)
+		if errWidth != nil || errHeight != nil {
+			return nil, errors.New("invalid PDF page size")
+		}
+		geometry := pageGeometry{width: width, height: height}
+		for _, header := range bboxHeader.FindAllStringSubmatch(chunk, -1) {
+			x, err := strconv.ParseFloat(header[1], 64)
+			if err == nil && x > width*0.45 && (geometry.rightStart == 0 || x < geometry.rightStart) {
+				geometry.rightStart = x
+			}
+		}
+		for _, word := range bboxWord.FindAllStringSubmatch(chunk, -1) {
+			xMin, errMin := strconv.ParseFloat(word[1], 64)
+			yMin, errY := strconv.ParseFloat(word[2], 64)
+			xMax, errMax := strconv.ParseFloat(word[3], 64)
+			// Watermarks, footers and wide figure labels are not column text.
+			if errMin == nil && errMax == nil && errY == nil && yMin < height*0.9 && xMax-xMin < 150 {
+				geometry.words = append(geometry.words, [2]float64{xMin, xMax})
+			}
+		}
+		geometries = append(geometries, geometry)
+	}
+	inferRightStarts(geometries)
+	if len(geometries) < pageCount {
+		return nil, errors.New("PDF word positions are incomplete")
+	}
+	return geometries, nil
+}
+
+// inferRightStarts handles two-column pages whose right column starts with no
+// "Questão" header (for example a continuation). It borrows the column start of
+// the nearest page with the same parity and keeps it only when no word crosses
+// the gutter, so single-column pages stay whole.
+func inferRightStarts(geometries []pageGeometry) {
+	known := map[int]float64{}
+	for i, geometry := range geometries {
+		if geometry.rightStart != 0 {
+			if _, ok := known[i%2]; !ok {
+				known[i%2] = geometry.rightStart
+			}
+		}
+	}
+	for i := range geometries {
+		start, ok := known[i%2]
+		if geometries[i].rightStart != 0 || !ok || len(geometries[i].words) == 0 {
+			continue
+		}
+		crossing, right := false, false
+		for _, word := range geometries[i].words {
+			if word[0] < start-8 && word[1] > start-2 {
+				crossing = true
+				break
+			}
+			if word[0] >= start-3 {
+				right = true
+			}
+		}
+		if !crossing && right {
+			geometries[i].rightStart = start
+		}
+	}
+}
+
+// readColumnPages reads each page as its left column followed by its right
+// column, keeping the original page numbers.
+func readColumnPages(ctx context.Context, path string, pageCount int) ([]parse.Page, error) {
+	geometries, err := pageGeometries(ctx, path, pageCount)
+	if err != nil {
+		return nil, err
+	}
+	pages := make([]parse.Page, 0, pageCount)
+	for number := 1; number <= pageCount; number++ {
+		value := strconv.Itoa(number)
+		geometry := geometries[number-1]
+		columns := [][2]int{{0, int(geometry.width) + 1}}
+		if geometry.rightStart != 0 {
+			split := int(geometry.rightStart) - 3
+			columns = [][2]int{{0, split}, {split, int(geometry.width) - split + 1}}
+		}
+		var text strings.Builder
+		for _, column := range columns {
+			column, err := runLimited(ctx, maxTextBytes, "pdftotext", "-layout", "-enc", "UTF-8", "-f", value, "-l", value,
+				"-x", strconv.Itoa(column[0]), "-y", "0", "-W", strconv.Itoa(column[1]), "-H", strconv.Itoa(int(geometry.height)+1), path, "-")
+			if err != nil {
+				return nil, errors.New("local PDF column extraction failed")
+			}
+			text.Write(column)
+			text.WriteByte('\n')
+		}
+		pages = append(pages, parse.Page{Number: number, Text: text.String()})
+	}
+	return pages, nil
 }
 
 func ReadText(ctx context.Context, path string) (string, error) {
