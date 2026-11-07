@@ -1,0 +1,30 @@
+{
+  "name": "questoes-v1",
+  "fields": [
+    { "name": "id", "type": "Edm.String", "key": true, "filterable": true },
+    { "name": "texto", "type": "Edm.String", "searchable": true, "retrievable": true },
+    { "name": "ano", "type": "Edm.Int32", "filterable": true, "retrievable": true },
+    { "name": "habilidade", "type": "Edm.String", "filterable": true, "retrievable": true },
+    { "name": "conteudos", "type": "Collection(Edm.String)", "filterable": true, "retrievable": true },
+    { "name": "origem", "type": "Edm.String", "filterable": true, "retrievable": true },
+    { "name": "arquivo", "type": "Edm.String", "retrievable": true },
+    { "name": "pagina", "type": "Edm.Int32", "retrievable": true },
+    { "name": "corpus_version", "type": "Edm.String", "filterable": true, "retrievable": true },
+    {
+      "name": "vetor",
+      "type": "Collection(Edm.Single)",
+      "searchable": true,
+      "retrievable": false,
+      "dimensions": 256,
+      "vectorSearchProfile": "questoes-hnsw"
+    }
+  ],
+  "vectorSearch": {
+    "algorithms": [
+      { "name": "hnsw-cosine", "kind": "hnsw", "hnswParameters": { "metric": "cosine" } }
+    ],
+    "profiles": [
+      { "name": "questoes-hnsw", "algorithm": "hnsw-cosine" }
+    ]
+  }
+}

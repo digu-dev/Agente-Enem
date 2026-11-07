@@ -87,6 +87,8 @@ jobs:
             terraform -chdir="$root" init -backend=false -input=false
             terraform -chdir="$root" validate
           done
+          terraform -chdir=infra/modules/ai init -backend=false -input=false
+          terraform -chdir=infra/modules/ai test
 
       - name: Set up TFLint
         uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
@@ -172,7 +174,7 @@ jobs:
         working-directory: infra/envs/dev
         run: |
           summary="$(terraform show -no-color dev.tfplan | awk '/^Plan: / { print; found=1 } END { if (!found) print "Plan: no changes" }')"
-          gh pr comment "$PR_NUMBER" --body "$(printf '### Terraform plan summary\n\n`%s`\n\nFull plan details are intentionally not published in the PR comment.' "$summary")"
+          gh pr comment "$PR_NUMBER" --body "$(printf '### Terraform plan summary\n\n`%s`\n\n**AI cost/security review:** Azure AI Search defaults to Free (public endpoint required by Free tier; Entra ID/RBAC only). Azure OpenAI and Document Intelligence default to disabled. OpenAI deployments, paid Search tiers, and Document Intelligence S0 can incur charges. Review the full plan and confirm regional quota before applying. Full plan details are intentionally not published in the PR comment.' "$summary")"
 
   deploy-dev:
     name: Apply and deploy dev
@@ -232,6 +234,9 @@ jobs:
       - name: Apply infrastructure
         working-directory: infra/envs/dev
         run: terraform apply -auto-approve -input=false
+
+      - name: Verify AI resource provisioning
+        run: scripts/verify-ai.sh infra/envs/dev
 
       - name: Azure login for image deployment with OIDC
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
