@@ -33,3 +33,47 @@ output "retrieval_fqdn" {
 output "web_fqdn" {
   value = module.web.fqdn
 }
+
+output "ingestion_identity_id" {
+  value = module.ingestion_identity.id
+}
+
+output "ingestion_identity_principal_id" {
+  value = module.ingestion_identity.principal_id
+}
+
+output "search_endpoint" {
+  value = module.ai.search_endpoint
+}
+
+output "search_id" {
+  value = module.ai.search_id
+}
+
+output "openai_id" {
+  value = module.ai.openai_id
+}
+
+output "openai_endpoint" {
+  value = module.ai.openai_endpoint
+}
+
+output "openai_chat_deployment" {
+  value = module.ai.openai_chat_deployment
+}
+
+output "openai_embedding_deployment" {
+  value = module.ai.openai_embedding_deployment
+}
+
+output "document_intelligence_endpoint" {
+  value = module.ai.document_intelligence_endpoint
+}
+
+output "document_intelligence_id" {
+  value = module.ai.document_intelligence_id
+}
+
+output "key_vault_uri" {
+  value = module.key_vault.vault_uri
+}

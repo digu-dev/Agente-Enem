@@ -66,6 +66,45 @@ module "key_vault" {
   tags                = local.tags
 }
 
+module "ingestion_identity" {
+  source = "../../modules/managed-identity"
+
+  name                = "ingestion-${local.name_prefix}-identity"
+  resource_group_name = module.resource_group.name
+  location            = var.location
+  tags                = local.tags
+}
+
+module "ai" {
+  source = "../../modules/ai"
+
+  resource_group_name                    = module.resource_group.name
+  location                               = var.location
+  tags                                   = local.tags
+  enable_search                          = var.enable_search
+  search_name                            = "enem-${var.environment}-${var.name_suffix}-search"
+  search_sku                             = var.search_sku
+  enable_search_paid_tier                = var.enable_search_paid_tier
+  search_replica_count                   = var.search_replica_count
+  search_partition_count                 = var.search_partition_count
+  search_public_network_access_enabled   = var.search_public_network_access_enabled
+  retrieval_principal_id                 = module.retrieval.identity_principal_id
+  ingestion_principal_id                 = module.ingestion_identity.principal_id
+  api_principal_id                       = module.api.identity_principal_id
+  cognitive_public_network_access_enabled = var.ai_public_network_access_enabled
+  enable_openai                          = var.enable_openai
+  openai_name                            = "enem${var.environment}${var.name_suffix}openai"
+  chat_model_name                        = var.chat_model_name
+  chat_model_version                     = var.chat_model_version
+  embedding_model_name                   = var.embedding_model_name
+  embedding_model_version                = var.embedding_model_version
+  openai_capacity                        = var.openai_capacity
+  enable_document_intelligence           = var.enable_document_intelligence
+  document_intelligence_name             = "enem${var.environment}${var.name_suffix}document"
+  document_intelligence_sku              = var.document_intelligence_sku
+  enable_document_intelligence_paid_tier = var.enable_document_intelligence_paid_tier
+}
+
 module "container_registry" {
   source = "../../modules/container-registry"
 

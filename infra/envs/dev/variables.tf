@@ -92,3 +92,119 @@ variable "deploy_principal_object_id" {
     error_message = "Deploy principal object ID must be a UUID."
   }
 }
+
+variable "enable_search" {
+  description = "Create Azure AI Search."
+  type        = bool
+  default     = true
+}
+
+variable "search_sku" {
+  description = "Azure AI Search tier; Free is the default."
+  type        = string
+  default     = "free"
+  validation {
+    condition     = contains(["free", "basic", "standard"], lower(var.search_sku))
+    error_message = "Search tier must be free, basic, or standard."
+  }
+}
+
+variable "enable_search_paid_tier" {
+  description = "Explicit opt-in required before selecting a paid Search tier."
+  type        = bool
+  default     = false
+}
+
+variable "search_replica_count" {
+  description = "Azure AI Search replica count."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.search_replica_count >= 1 && var.search_replica_count <= 12
+    error_message = "Search replicas must be between 1 and 12."
+  }
+}
+
+variable "search_partition_count" {
+  description = "Azure AI Search partition count."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.search_partition_count >= 1 && var.search_partition_count <= 12
+    error_message = "Search partitions must be between 1 and 12."
+  }
+}
+
+variable "search_public_network_access_enabled" {
+  description = "Search Free requires its public endpoint; paid tiers can disable it when private connectivity exists."
+  type        = bool
+  default     = true
+}
+
+variable "ai_public_network_access_enabled" {
+  description = "Enable public networking for AI endpoints; requires Entra ID/RBAC and is disabled by default."
+  type        = bool
+  default     = false
+}
+
+variable "enable_openai" {
+  description = "Create Azure OpenAI and its model deployments; disabled by default because it can incur charges."
+  type        = bool
+  default     = false
+}
+
+variable "chat_model_name" {
+  description = "Exact chat model name available in the selected Azure region and subscription."
+  type        = string
+  default     = ""
+}
+
+variable "chat_model_version" {
+  description = "Exact chat model version available in the selected Azure region and subscription."
+  type        = string
+  default     = ""
+}
+
+variable "embedding_model_name" {
+  description = "Exact embedding model name available in the selected Azure region and subscription."
+  type        = string
+  default     = ""
+}
+
+variable "embedding_model_version" {
+  description = "Exact embedding model version available in the selected Azure region and subscription."
+  type        = string
+  default     = ""
+}
+
+variable "openai_capacity" {
+  description = "Low initial Azure OpenAI deployment capacity; confirm model-specific TPM quota in the portal."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.openai_capacity >= 1 && var.openai_capacity <= 10
+    error_message = "OpenAI capacity must be between 1 and 10."
+  }
+}
+
+variable "enable_document_intelligence" {
+  description = "Create Document Intelligence; disabled by default."
+  type        = bool
+  default     = false
+}
+
+variable "document_intelligence_sku" {
+  description = "Document Intelligence tier. F0 is the default; S0 needs explicit paid-tier opt-in."
+  type        = string
+  default     = "F0"
+  validation {
+    condition     = contains(["f0", "s0"], lower(var.document_intelligence_sku))
+    error_message = "Document Intelligence tier must be F0 or S0."
+  }
+}
+
+variable "enable_document_intelligence_paid_tier" {
+  description = "Explicit opt-in required before selecting paid Document Intelligence S0."
+  type        = bool
+  default     = false
+}

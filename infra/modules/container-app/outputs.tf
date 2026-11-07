@@ -13,3 +13,7 @@ output "fqdn" {
 output "identity_id" {
   value = module.identity.id
 }
+
+output "identity_principal_id" {
+  value = module.identity.principal_id
+}
